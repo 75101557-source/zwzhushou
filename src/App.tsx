@@ -18,7 +18,12 @@ import {
   Sun,
   Smile,
   RefreshCw,
-  Trophy
+  Trophy,
+  Menu,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Book
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { ESSAY_UNITS, EssayUnit } from './constants';
@@ -28,6 +33,7 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export default function App() {
   const [selectedUnit, setSelectedUnit] = useState<EssayUnit | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -38,8 +44,24 @@ export default function App() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [isTechniquePhase, setIsTechniquePhase] = useState(false);
   const [practiceAnswer, setPracticeAnswer] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const mainRef = useRef<HTMLDivElement>(null);
+
+  // Group units for sidebar
+  const groupedUnits = ESSAY_UNITS.reduce((acc, unit) => {
+    if (!acc[unit.grade]) acc[unit.grade] = {};
+    if (!acc[unit.grade][unit.semester]) acc[unit.grade][unit.semester] = [];
+    acc[unit.grade][unit.semester].push(unit);
+    return acc;
+  }, {} as Record<string, Record<string, EssayUnit[]>>);
+
+  const handleStartUnit = (unit: EssayUnit) => {
+    setSelectedUnit(unit);
+    resetState();
+    setSelectedUnit(unit); // Re-set because resetState clears it
+    setIsSidebarOpen(false); // Hide sidebar after selection
+  };
 
   const handleNextQuestion = () => {
     if (!currentAnswer.trim()) return;
@@ -124,7 +146,7 @@ export default function App() {
       学生的练笔：${practiceAnswer}
       ` : "";
 
-      const prompt = `你是一位亲切的语文老师。现在正在教三年级的小学生写作文。
+      const prompt = `你是一位亲切的语文老师。现在正在教${selectedUnit?.grade}的小学生写作文。
       当前的作文题目是：${selectedUnit?.topic}
       学生已经回答了一些引导性问题，这些回答包含了他们的观察和思路：
       ${answersText}
@@ -135,7 +157,7 @@ export default function App() {
       要求：
       1. 必须包含学生回答中的核心信息和思路。
       2. 必须包含学生的练笔内容（可以进行微调使其更通顺，但要保留核心意思）。
-      3. 语言要符合三年级小学生的水平，生动活泼，多用修辞。
+      3. 语言要符合${selectedUnit?.grade}小学生的水平，生动活泼，多用修辞。
       4. 每篇作文要有题目。
       5. 每篇作文长度【必须严格】在300-400字之间。
       6. 作文必须合理分段，每个自然段开头空两格（使用两个全宽空格），确保格式规范、条理清晰。
@@ -175,6 +197,95 @@ export default function App() {
     setPracticeAnswer("");
   };
 
+  const resetAll = () => {
+    resetState();
+    setSelectedGrade(null);
+  };
+
+  const Sidebar = () => {
+    const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({ 
+      "三年级": true, 
+      "四年级": true, 
+      "五年级": true, 
+      "六年级": true 
+    });
+
+    const toggleGrade = (grade: string) => {
+      setExpandedGrades(prev => ({ ...prev, [grade]: !prev[grade] }));
+    };
+
+    return (
+      <motion.div 
+        initial={{ x: -320 }}
+        animate={{ x: isSidebarOpen ? 0 : -320 }}
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="fixed top-0 left-0 h-full w-80 bg-white border-r-4 border-yellow-200 z-[60] shadow-2xl overflow-y-auto"
+      >
+        <div className="sticky top-0 bg-white z-10 px-6 py-6 border-b-2 border-yellow-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Book className="text-orange-500" size={24} />
+            <h3 className="text-xl font-black text-orange-900 serif">课程大纲</h3>
+          </div>
+          <button 
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-2 hover:bg-orange-50 rounded-full text-orange-600 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {Object.entries(groupedUnits).map(([grade, semesters]) => (
+            <div key={grade} className="space-y-2">
+              <button 
+                onClick={() => toggleGrade(grade)}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-yellow-50 text-orange-900 font-bold hover:bg-yellow-100 transition-colors"
+              >
+                <span>{grade}</span>
+                {expandedGrades[grade] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              
+              <AnimatePresence>
+                {expandedGrades[grade] && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden space-y-2 pl-2"
+                  >
+                    {Object.entries(semesters).map(([semester, units]) => (
+                      <div key={semester} className="space-y-1">
+                        <div className="px-3 py-1 text-xs font-bold text-orange-400 uppercase tracking-wider">{semester}</div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {units.map((unit) => (
+                            <button
+                              key={unit.id}
+                              onClick={() => handleStartUnit(unit)}
+                              className={`text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                selectedUnit?.id === unit.id 
+                                  ? "bg-orange-500 text-white shadow-md" 
+                                  : "bg-white border-2 border-transparent hover:border-orange-200 text-stone-600 hover:text-orange-600"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-60">{unit.title}</span>
+                                <span className="font-bold">{unit.topic}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    );
+  };
+
   const handleDownloadEssay = (essay: {title: string, content: string}) => {
     const element = document.createElement("a");
     const file = new Blob([`《${essay.title}》\n\n${essay.content}`], {type: 'text/plain'});
@@ -201,73 +312,182 @@ export default function App() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b-4 border-yellow-200 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={resetState}>
-          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg transform -rotate-3">
-            <GraduationCap size={28} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-orange-900 serif">作文小状元</h1>
-            <p className="text-xs text-orange-600 font-bold">部编版三年级下册同步</p>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 hover:bg-orange-50 rounded-xl text-orange-600 transition-colors border-2 border-orange-100 lg:hidden"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={resetAll}>
+            <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg transform -rotate-3">
+              <GraduationCap size={24} />
+            </div>
+            <div className="hidden sm:block">
+              <h1 className="text-xl font-black tracking-tight text-orange-900 serif">作文小状元</h1>
+              <p className="text-[10px] text-orange-600 font-bold">部编版同步指导</p>
+            </div>
           </div>
         </div>
-        {selectedUnit && (
+
+        <div className="flex items-center gap-4">
           <button 
-            onClick={resetState}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-orange-100 text-orange-700 hover:bg-orange-200 transition-all font-bold text-sm border-2 border-orange-200"
+            onClick={() => setIsSidebarOpen(true)}
+            className="hidden lg:flex items-center gap-2 px-4 py-2.5 rounded-full bg-yellow-400 text-orange-900 hover:bg-yellow-500 transition-all font-bold text-sm shadow-md"
           >
-            <Home size={18} />
-            <span>回大厅</span>
+            <BookOpen size={18} />
+            <span>课程目录</span>
           </button>
-        )}
+
+          {selectedGrade && (
+            <button 
+              onClick={resetAll}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-orange-100 text-orange-700 hover:bg-orange-200 transition-all font-bold text-sm border-2 border-orange-200"
+            >
+              <Home size={18} />
+              <span className="hidden sm:inline">回大厅</span>
+            </button>
+          )}
+        </div>
       </header>
+
+      {/* Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-orange-900/40 backdrop-blur-sm z-50 lg:z-[55]"
+          />
+        )}
+      </AnimatePresence>
+
+      <Sidebar />
 
       <main ref={mainRef} className="relative z-10 max-w-6xl mx-auto px-6 py-12">
         <AnimatePresence mode="wait">
-          {!selectedUnit ? (
+          {!selectedGrade && !selectedUnit ? (
             <motion.div 
-              key="home"
+              key="dashboard"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.1 }}
-              className="space-y-12"
+              className="min-h-[70vh] flex flex-col items-center justify-center space-y-16 py-12"
             >
-              <div className="text-center space-y-6">
+              <div className="text-center space-y-4 max-w-2xl mx-auto">
                 <motion.div 
-                  initial={{ y: -20 }}
-                  animate={{ y: 0 }}
-                  className="inline-block px-6 py-2 bg-white rounded-full border-2 border-yellow-300 text-orange-600 font-bold text-sm shadow-sm"
+                  initial={{ rotate: -10, scale: 0 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  className="w-24 h-24 bg-yellow-400 rounded-3xl mx-auto flex items-center justify-center text-white shadow-2xl mb-6 transform rotate-3"
                 >
-                  ✨ 欢迎来到写作乐园 ✨
+                  <GraduationCap size={48} />
                 </motion.div>
-                <h2 className="text-5xl font-black text-orange-900 serif leading-tight">
-                  小朋友，今天我们来<br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-500">开启写作大冒险</span>吧！
+                <h2 className="text-6xl font-black text-orange-900 serif leading-tight">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-500">作文小状元</span>仪表盘
                 </h2>
+                <p className="text-xl text-orange-700 font-bold opacity-80 italic">
+                  “部编版”同步指导 · 开启你的写作奇幻旅程
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {ESSAY_UNITS.map((unit, idx) => (
+              <div className="relative w-full max-w-4xl h-[400px] flex items-center justify-center">
+                {/* Central Decorative Circle */}
+                <div className="absolute w-64 h-64 bg-orange-50 rounded-full border-8 border-yellow-100/50 animate-pulse flex items-center justify-center">
+                  <div className="text-center">
+                    <PenTool size={40} className="text-orange-300 mx-auto mb-2" />
+                    <span className="text-orange-400 font-black text-xs uppercase tracking-widest">请选择年级</span>
+                  </div>
+                </div>
+
+                {/* Dashboard centered distribution */}
+                <div className="grid grid-cols-2 gap-8 relative z-10 w-full max-w-lg mx-auto">
+                  {[
+                    { grade: "三年级", color: "bg-green-100 border-green-200 text-green-700", icon: <Smile size={32} /> },
+                    { grade: "四年级", color: "bg-blue-100 border-blue-200 text-blue-700", icon: <Star size={32} /> },
+                    { grade: "五年级", color: "bg-purple-100 border-purple-200 text-purple-700", icon: <Heart size={32} /> },
+                    { grade: "六年级", color: "bg-red-100 border-red-200 text-red-700", icon: <Trophy size={32} /> },
+                  ].map((item, idx) => (
+                    <motion.div
+                      key={item.grade}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 + idx * 0.1 }}
+                      whileHover={{ scale: 1.05, y: -5 }}
+                      onClick={() => setSelectedGrade(item.grade)}
+                      className={`cursor-pointer group p-8 rounded-[2.5rem] border-4 ${item.color} shadow-lg hover:shadow-2xl transition-all duration-300 
+                                  flex flex-col items-center justify-center gap-4 bg-white/80 backdrop-blur-sm`}
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-current shadow-md group-hover:bg-orange-500 group-hover:text-white transition-all transform group-hover:rotate-6">
+                        {item.icon}
+                      </div>
+                      <span className="text-2xl font-black serif">{item.grade}</span>
+                      <div className="h-1.5 w-10 bg-current opacity-20 rounded-full group-hover:w-20 group-hover:opacity-100 transition-all"></div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          ) : !selectedUnit ? (
+            <motion.div 
+              key="units"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="space-y-12"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <button 
+                    onClick={() => setSelectedGrade(null)}
+                    className="flex items-center gap-2 text-orange-600 font-bold hover:gap-3 transition-all mb-4"
+                  >
+                    <ChevronLeft size={20} />
+                    <span>返回仪表盘</span>
+                  </button>
+                  <h2 className="text-4xl font-black text-orange-900 serif">
+                    {selectedGrade} · <span className="text-orange-600">选择课题</span>
+                  </h2>
+                </div>
+                <div className="hidden md:flex flex-col items-end">
+                  <span className="text-xs font-black text-orange-400 uppercase tracking-widest mb-1">当前年级</span>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-black rounded-full border border-orange-200">
+                      第 {ESSAY_UNITS.filter(u => u.grade === selectedGrade).length} 门课程
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {ESSAY_UNITS.filter(u => u.grade === selectedGrade).map((unit, idx) => (
                   <motion.div
                     key={unit.id}
-                    initial={{ opacity: 0, x: idx % 2 === 0 ? -20 : 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    whileHover={{ scale: 1.03, rotate: idx % 2 === 0 ? 1 : -1 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    whileHover={{ scale: 1.03, y: -5 }}
                     onClick={() => setSelectedUnit(unit)}
-                    className="group cursor-pointer bg-white border-4 border-yellow-100 rounded-[2.5rem] p-8 shadow-xl hover:shadow-2xl hover:border-yellow-300 transition-all duration-300 relative overflow-hidden"
+                    className="group cursor-pointer bg-white border-4 border-yellow-100 rounded-[2rem] p-7 shadow-xl hover:shadow-2xl hover:border-yellow-300 transition-all duration-300 relative overflow-hidden"
                   >
-                    <div className="absolute -top-4 -right-4 w-20 h-20 bg-yellow-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-yellow-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
                     <div className="relative z-10">
-                      <div className="flex justify-between items-center mb-6">
-                        <span className="px-4 py-1.5 bg-orange-100 text-orange-700 text-xs font-black rounded-full uppercase tracking-widest">
-                          {unit.title}
-                        </span>
-                        <div className="w-10 h-10 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-all shadow-inner">
-                          <ChevronRight size={24} />
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex flex-col gap-1.5">
+                          <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded w-fit uppercase">
+                            {unit.semester}
+                          </span>
+                          <span className="px-3 py-1 bg-orange-100 text-orange-700 text-[10px] font-black rounded-full uppercase tracking-widest w-fit">
+                            {unit.title}
+                          </span>
+                        </div>
+                        <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-all shadow-inner">
+                          <ChevronRight size={20} />
                         </div>
                       </div>
-                      <h3 className="text-2xl font-black text-gray-800 mb-3 group-hover:text-orange-600 transition-colors serif">{unit.topic}</h3>
-                      <p className="text-gray-500 font-medium leading-relaxed">
+                      <h3 className="text-xl font-black text-gray-800 mb-2 group-hover:text-orange-600 transition-colors serif">{unit.topic}</h3>
+                      <p className="text-gray-500 text-xs font-medium leading-relaxed line-clamp-2">
                         {unit.description}
                       </p>
                     </div>
